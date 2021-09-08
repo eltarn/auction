@@ -7,7 +7,7 @@ object Auction {
    * @param requests buy and sell requests
    * @return prices (or arithmetic mean of them) with maximum of iterations or "0 n/a" if there is no result
    */
-  def processResult(requests: Vector[Request]): String = {
+  def calculate(requests: Vector[Request]): String = {
     val (buy, sell) =
       groupRequests(requests)
         .partition { t =>
@@ -92,7 +92,7 @@ object Auction {
       .flatMap(stringToRequest)
       .toVector
 
-    Auction.processResult(res)
+    Auction.calculate(res)
   }
 
   /** Result of calculation the maximum number of shares sold.

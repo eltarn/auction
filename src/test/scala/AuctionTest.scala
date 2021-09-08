@@ -57,7 +57,7 @@ class AuctionTest extends org.scalatest.funsuite.AnyFunSuite {
 
   test("Work with huge amount of data") {
     assert(
-      Auction.processResult(mockupGenerator.generateRequest(1000000))
+      Auction.calculate(mockupGenerator.generateRequest(1000000))
         .nonEmpty
     )
   }
@@ -87,8 +87,8 @@ object mockupGenerator {
   protected def randomRequest(): Request = {
     Request(
       direction = RequestDirection.apply(Random.between(0, 2)),
-      count = Random.between(1, 1000),
-      price = BigDecimal(Random.between(1d, 100d)).setScale(2, RoundingMode.HALF_UP)
+      count = Random.between(1, 1001),
+      price = BigDecimal(Random.between(1d, 101d)).setScale(2, RoundingMode.HALF_UP)
     )
   }
 }
