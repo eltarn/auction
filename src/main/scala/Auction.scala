@@ -1,57 +1,118 @@
-import scala.annotation.tailrec
-import scala.collection.mutable.ArrayBuffer
+
 
 object Auction {
 
-  def getResult(transactions: Vector[Transaction]): String = {
-    val (buy, sell) = transactions.partition { t =>
-      t.direction.id == TransactionDirection.Buy.id
+  /** Calculates the maximum number of shares sold. If there are more than one such, it returns their arithmetic mean.
+   *
+   * @param requests buy and sell requests
+   * @return prices (or arithmetic mean of them) with maximum of iterations or "0 n/a" if there is no result
+   */
+  def processResult(requests: Vector[Request]): String = {
+    val (buy, sell) =
+      groupRequests(requests)
+        .partition { t =>
+          t.direction.id == RequestDirection.Buy.id
+        }
+
+    val result = sell.flatMap { sellRequest =>
+      buy.filter(_.price >= sellRequest.price).map(_.count).sum match {
+        case available if available > 0 =>
+          Some(Result(
+            count = if (available > sellRequest.count) sellRequest.count else available,
+            price = sellRequest.price
+          ))
+        case _ => None
+      }
+
     }
 
-    var vector = Vector.empty[Transaction]
-    val result = sell.map { s =>
-      val toBuy = buy
-        .filter(_.price >= s.price)
-        .sortBy(_.price)
-      val y = doSell(s, toBuy, Iterable.empty[Sold])
-      vector = y.res
-      y
+    result match {
+      case res if res.nonEmpty =>
+
+        val maxCounts = result.groupBy(_.count).maxBy(_._1)._2
+        Result(
+          count = maxCounts.head.count,
+          price = maxCounts.map(_.price).sum / maxCounts.size
+        ).toString
+
+      case _ => "0 n/a"
     }
 
-    val x = result.flatMap(_.sold)
-    println(x)
-    s"${x.map(_.count).sum} ${x.map(_.price).sum / x.size}"
   }
 
-  case class Sold(count: Int, price: BigDecimal)
-  case class Test(transaction: Transaction, vector: Vector[Transaction], sold: Int)
-  case class Result(sold: Iterable[Sold], res: Vector[Transaction])
+  /** Group given requests for simplify calculations.
+   *
+   * @param requests buy and sell requests
+   * @return buy and sell requests groped by price and direction
+   */
+  protected def groupRequests(requests: Iterable[Request]): Iterable[Request] = {
+    requests
+      .groupBy(elem => (elem.direction, elem.price))
+      .map {
+        item =>
+          Request(
+            direction = item._1._1,
+            count = item._2.map(_.count).sum,
+            price = item._1._2
+          )
+      }
+  }
 
-  @tailrec
-  def doSell(sellTransaction: Transaction, vector: Vector[Transaction], sold: Iterable[Sold]): Result = {
-    println(vector.size)
-    val buyTransaction = vector.head
-    val t = (sellTransaction, buyTransaction) match {
-      case (s, b) if s.count >= b.count =>
-        val soldCount = b.count
-        Test(s.copy(count = s.count - soldCount), vector.tail, soldCount)
-      case (s, b) if s.count < b.count =>
-        val soldCount = s.count
-        val nB = b.copy(count = b.count - soldCount)
-        Test(s.copy(count = 0), vector.tail ++ Option(nB), soldCount)
-    }
-    println(t)
-    if (t.transaction.count > 0 && t.vector.nonEmpty) {
-      doSell(t.transaction, t.vector, sold ++ Iterable(Sold(t.sold, buyTransaction.price)))
-    } else  {
-      Result(sold ++ Iterable(Sold(t.sold, buyTransaction.price)), t.vector)
+  /** Split given values, convert them into Requests, and calculate the maximum number of shared sold.
+   *
+   * @param string values to convert. Must match the specified format (direction: one letter B or S (Buy or Sell),
+   *               count: natural number, price: floating point number, rubles) and must be
+   *               separated by line breaks
+   * @return buy and sell requests groped by price and direction
+   */
+  def stringToRequest(string: String): Option[Request] = {
+    val pattern = "([BS]) [0-9]+ [0-9]*\\.[0-9]+".r
+    string match {
+      case value if pattern.matches(value.trim) =>
+        val values = value.split(" ")
+        Some(Request(
+          direction = RequestDirection.withName(values(0)),
+          count = values(1).toIntOption.getOrElse(0),
+          price = BigDecimal.valueOf(values(2).toDoubleOption.getOrElse(0d))
+        ))
+      case _ => None
     }
   }
 
+  /** Converts the given String into Request object.
+   * Checks the value for accordance expected format.
+   *
+   * @param string value to convert. Must match the specified format (direction: one letter B or S (Buy or Sell),
+   *               count: natural number, price: floating point number, rubles)
+   * @return prices (or arithmetic mean of them) with maximum of iterations or "0 n/a" if there is no result
+   */
+  def processMultilineString(string: String): String = {
+    val res = string
+      .split("\n")
+      .flatMap(stringToRequest)
+      .toVector
+
+    Auction.processResult(res)
+  }
+
+  /** Result of calculation the maximum number of shares sold.
+   *
+   *  @param count number of iterations with specified price
+   *  @param price share's price
+   */
+  case class Result(count: Int, price: BigDecimal) {
+    override def toString: String = s"$count $price"
+  }
 
 }
 
-case class Transaction(direction: TransactionDirection.Value, count: Integer, price: BigDecimal) {
+/** Request to buy or sell the share.
+ *
+ *  @param direction type of financial transaction
+ *  @param count amount of shares for current transaction
+ *  @param price share's price
+ */
+case class Request(direction: RequestDirection.Value, count: Int, price: BigDecimal) {
 
   override def toString: String = {
     s"${direction.toString} $count $price"
@@ -60,7 +121,7 @@ case class Transaction(direction: TransactionDirection.Value, count: Integer, pr
 }
 
 
-object TransactionDirection extends Enumeration {
-  val Buy: TransactionDirection.Value = Value("B")
-  val Sell: TransactionDirection.Value = Value("S")
+object RequestDirection extends Enumeration {
+  val Buy: RequestDirection.Value = Value("B")
+  val Sell: RequestDirection.Value = Value("S")
 }
